@@ -1,0 +1,16 @@
+{
+  "name": "kmoon-web-analyzer",
+  "version": "1.2.0",
+  "private": true,
+  "description": "KMoon Web Analyzer is a local-only Chrome extension for website activity monitoring, crawling, copying, and security analysis.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kcrespo1025/Kmoon-Web-Analyzer"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package-crx": "node scripts/package-crx.mjs",
+    "test": "node --check extension/background/service-worker.js && node --check extension/content/content.js && node --check scripts/build.mjs && node --check scripts/package-crx.mjs && node tests/verify-structure.mjs"
+  }
+}

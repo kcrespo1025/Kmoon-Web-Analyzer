@@ -1,0 +1,59 @@
+name: Build official release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Test and build
+        run: |
+          npm test
+          npm run build
+      - name: Prepare release archive and checksum
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $archive = "KMoon-Web-Analyzer-$tag.zip"
+          Compress-Archive -Path "dist/download/KMoon-Web-Analyzer/*" -DestinationPath $archive
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          "$hash  $archive" | Set-Content -Encoding ascii SHA256SUMS.txt
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $tag = $env:RELEASE_TAG
+          $manifest = Get-Content extension/manifest.json -Raw | ConvertFrom-Json
+          if ($tag -ne "v$($manifest.version)" -and $tag -notlike "v$($manifest.version)-*") {
+            throw "Tag $tag does not match manifest version $($manifest.version)."
+          }
+          $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:REPOSITORY/releases" -Headers $headers -ContentType "application/json" -Body (@{
+            tag_name = $tag
+            name = "KMoon Web Analyzer $tag"
+            generate_release_notes = $true
+            prerelease = ($tag -match "-")
+          } | ConvertTo-Json)
+          foreach ($file in @("KMoon-Web-Analyzer-$tag.zip", "SHA256SUMS.txt")) {
+            $uploadUri = "https://uploads.github.com/repos/$env:REPOSITORY/releases/$($release.id)/assets?name=$([uri]::EscapeDataString($file))"
+            Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $headers -ContentType "application/octet-stream" -InFile $file | Out-Null
+          }
